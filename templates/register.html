@@ -1,0 +1,10 @@
+{% include 'header.html' %}
+{% if err_msg %}
+{{ err_msg }}
+<br><a href="javascript:history.back()">Please return back and try again</a>
+{% else %}
+<h2>Welcome aboard!</h2>
+Hey {{ username }}, now you have an account, 
+<a href="/">a good start is to write your first message!</a>.
+{% endif %}
+{% include 'footer.html' %}

@@ -1,0 +1,27 @@
+{% include 'header.html' %}
+<div id="postform">
+
+{% if err_msg %}
+<div>
+{{ err_msg }}
+</div
+{% endif %}
+    <form method="POST" action="/post">
+        {{ username }}, what you are doing?
+        <br/>
+        <table>
+            <tr><td><textarea cols="70" rows="3" name="status"></textarea></td></tr>
+            <tr><td align="right"><input type="submit" name="doit" value="Update"></td></tr>
+        </table>
+    </form>
+    <div id="homeinfobox">
+        {{ followers }}<br/>
+        {{ following }}
+    </div>
+</div>
+{% for post in posts %}
+
+<div class="post">{{ post }}<br><i>posted ago via web</i></div>
+{% endfor %}
+
+{% include 'footer.html' %}
