@@ -18,21 +18,24 @@ def get_rand():
     return hashlib.md5(data).hexdigest()
 
 def is_logged():
+    logged = False
     authcookie = request.cookies.get('auth')
     if authcookie:
         r = redis_link();
-        user_id = long(r.get('auth:%s' % authcookie))
+        user_id = r.get('auth:%s' % authcookie)
+
         if user_id:
-            if r.get('uid:%d:auth' % user_id) != authcookie:
-                raise RuntimeError('User is not logged')
-            return load_user_info(user_id)
-        else:
-            raise RuntimeError('User is not logged')
+            if r.get('uid:%d:auth' % user_id) == authcookie:
+                logged = True
+    
+    if not logged:
+        raise RuntimeError('User is not logged')
+    return load_user_info(user_id)
 
 def load_user_info(user_id):
     r = redis_link();
     user = {
-        'id': user_id,
+        'id': long(user_id),
         'username': r.get('uid:%d:username' % user_id)
     }
     
@@ -177,7 +180,6 @@ def register():
 def home():
     try:
         user_info = is_logged()
-
         return render_template('home.html', logged=True,
                                 username=user_info['username'],
                                 followers='', following='',
