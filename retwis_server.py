@@ -15,7 +15,6 @@ def get_rand():
     data = None
     with open("/dev/random", 'rb') as f:
         data = repr(f.read(16))
-    close(f)
     return hashlib.md5(data).hexdigest()
 
 def is_logged():
@@ -66,7 +65,7 @@ def create_user(username, password):
     r.set('uid:%d:username' % user_id, username)
     r.set('uid:%d:password' % user_id, password)
 
-    auth_secret = 1000
+    auth_secret = get_rand()
     r.set('uid:%d:auth' % user_id, auth_secret)
     r.set('auth:%d' % auth_secret, user_id)
 
@@ -77,9 +76,10 @@ def create_user(username, password):
 def login_user(username, password):
     print 'Login user %s' % username
     r = redis_link()
-    user_id = long(r.get('username:%s:id' % username))
+    user_id = r.get('username:%s:id' % username)
     if not user_id:
         raise RuntimeError('Wrong username or password')
+    user_id = long(user_id)
     realpassword = r.get('uid:%d:password' % user_id)
     if not realpassword:
         raise RuntimeError('Wrong username or password')
@@ -88,7 +88,7 @@ def login_user(username, password):
 
 def logout_user(user_id):
     r = redis_link()
-    new_auth_secret = 0111
+    new_auth_secret = get_rand()
     oldauthsecret = r.get('uid:%d:auth' % user_id)
     r.set('uid:%d:auth' % user_id, new_auth_secret)
     r.set('auth:%s' % new_auth_secret, user_id)
@@ -214,9 +214,7 @@ def login():
         validate_user(username, password, password)
         auth_secret = login_user(username, password)    
 
-        ret = make_response(render_template('home.html',
-                            username=request.form['username']))
-
+        ret = make_response(redirect('/home'))
         ret.set_cookie('auth', '%s' % auth_secret)
 
         return ret
