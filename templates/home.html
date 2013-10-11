@@ -20,8 +20,6 @@
     </div>
 </div>
 {% for post in posts %}
-
-<div class="post">{{ post }}<br><i>posted ago via web</i></div>
+<div class="post">{{ post.status }}<br><i>posted {{ post.elapsed }} ago via web</i></div>
 {% endfor %}
-
 {% include 'footer.html' %}
