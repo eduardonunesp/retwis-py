@@ -25,7 +25,7 @@ def is_logged():
         user_id = r.get('auth:%s' % authcookie)
 
         if user_id:
-            if r.get('uid:%d:auth' % user_id) == authcookie:
+            if r.get('uid:%d:auth' % long(user_id)) == authcookie:
                 logged = True
     
     if not logged:
@@ -36,13 +36,13 @@ def load_user_info(user_id):
     r = redis_link();
     user = {
         'id': long(user_id),
-        'username': r.get('uid:%d:username' % user_id)
+        'username': r.get('uid:%d:username' % long(user_id))
     }
     
     return user;
 
 def redis_link():
-    return _redis.StrictRedis(host='localhost', port=6379, db=0)
+    return _redis.StrictRedis(host='localhost', port=6379, db=1)
 
 def validate_user(username, password, password2):
     print 'Testing fields for %s' % username
@@ -63,14 +63,14 @@ def user_exits(username):
 def create_user(username, password):
     print 'Creating user %s' % username
     r = redis_link()
-    user_id = r.incr('global:nextUserId')
+    user_id = long(r.incr('global:nextUserId'))
     r.set('username:%s:id' % username, user_id)
     r.set('uid:%d:username' % user_id, username)
     r.set('uid:%d:password' % user_id, password)
 
     auth_secret = get_rand()
     r.set('uid:%d:auth' % user_id, auth_secret)
-    r.set('auth:%d' % auth_secret, user_id)
+    r.set('auth:%s' % auth_secret, user_id)
 
     r.sadd('global:users', user_id)
     print 'User %s created' % username
@@ -104,10 +104,10 @@ def new_retwis(status, user_id):
     post = '%d|%s|%s' % (user_id, time(), status)
     r.set('post:%d' % post_id, post)
     followers = r.smembers('uid:%d:followers' % (user_id))
-    followers.add(post)
+    followers.add(user_id)
 
     for follower in followers:
-        r.lpush('uid:%d:posts' % user_id, post_id)
+        r.lpush('uid:%d:posts' % long(follower), post_id)
 
     r.lpush('global:timeline', post_id)
     r.ltrim('global:timeline', 0, 1000)
@@ -125,7 +125,7 @@ def elapsed(t):
     d = d/(3600*24)
     return '%d day %s' % (d, d > 1 and 's' or '')
 
-def get_user_posts(user_id):
+def get_user_posts(user_id, username):
     r = redis_link()
     key = user_id == -1 and 'global:timeline' or 'uid:%d:posts' % long(user_id)
     posts = r.lrange(key, 0, 1000)
@@ -136,6 +136,7 @@ def get_user_posts(user_id):
             data = r.get('post:%d' % long(post))
             id, time, status = data.split('|')
             postd = {
+                'username':r.get('uid:%d:username' % long(id)),
                 'status':status.decode('utf-8'),
                 'elapsed':elapsed(long(float(time)))
             }
@@ -145,6 +146,63 @@ def get_user_posts(user_id):
 
     return html_posts
 
+def get_profile(username, my_user_id):
+    r = redis_link()
+    user_id = r.get('username:%s:id' % username)
+
+    if not user_id:
+        raise RuntimeError('Profile %s not exists' % username)
+
+    user_id = long(user_id)
+    profile = {'user_id':user_id}
+    
+    if user_id == my_user_id:
+        profile['self'] = True
+        return profile
+    else:
+        profile['self'] = False
+
+    is_following = r.sismember('uid:%d:following' % long(user_id), long(my_user_id))
+
+    profile = {'user_id':user_id}
+    if is_following:
+        profile['is_following'] = True
+    else:
+        profile['is_following'] = False
+    return profile
+
+def user_follow(user_id, my_user_id, op):
+    r = redis_link()
+
+    if my_user_id == user_id:
+        return r.get('uid:%d:username' % long(user_id))
+
+    user_id = long(user_id)
+    my_user_id = long(my_user_id)
+
+    if op == '1':
+        r.sadd('uid:%d:followers' % my_user_id, user_id);
+        r.sadd('uid:%d:following' % user_id, my_user_id);
+    elif op == '0':
+        r.srem('uid:%d:followers' % my_user_id, user_id);
+        r.srem('uid:%d:following' % user_id, my_user_id);
+    else:
+        raise ValueError('Invalid operation')
+    return r.get('uid:%d:username' % long(user_id))
+
+def count_followers(user_id):
+    r = redis_link()
+    return r.scard('uid:%d:followers' % user_id)
+
+def count_following(user_id):
+    r = redis_link()
+    return r.scard('uid:%d:following' % user_id)
+
+def get_last_users():
+    r = redis_link();
+    users = r.sort('global:users', get='uid:*:username', start=0, num=10);
+    return users
+    
 @app.route("/")
 def root():
     try:
@@ -180,12 +238,42 @@ def register():
 def home():
     try:
         user_info = is_logged()
+        followers = count_followers(int(user_info['id']))
+        following = count_following(int(user_info['id']))
         return render_template('home.html', logged=True,
                                 username=user_info['username'],
-                                followers='', following='',
-                                posts=get_user_posts(user_info['id']))    
+                                followers=followers, following=following,
+                                posts=get_user_posts(user_info['id'], 
+                                                     user_info['username']))
     except RuntimeError, e:
         return redirect('/')
+
+@app.route('/timeline')
+def timeline():
+    user_info = None
+
+    try:
+        user_info = is_logged()
+        return render_template('timeline.html', logged=True,
+                               last_users=get_last_users(),
+                               last_posts=get_user_posts(-1, user_info['username']))
+    except RuntimeError, e:
+        return redirect('/')
+
+@app.route('/profile/<username>')
+def profile(username):
+    user_info = None
+
+    try:
+        user_info = is_logged()
+        return render_template('profile.html', logged=True,
+                                username=username,
+                                profile=get_profile(username, long(user_info['id'])))
+
+    except (RuntimeError, ValueError), e:
+        return render_template('profile.html', logged=True,
+                                username=username,
+                                err_msg=e)
 
 @app.route('/post', methods=['POST'])
 def post():
@@ -242,5 +330,22 @@ def logout():
     except RuntimeError, e:
         return redirect('/')
 
+@app.route('/follow')
+def follow():
+    user_info = None
+
+    try:
+        user_info = is_logged()
+        username = user_follow(long(request.values['uid']),
+                               long(user_info['id']),
+                               request.values['f'])
+
+        return redirect('/profile/%s' % username)
+    except RuntimeError, e:
+        return redirect('/')
+    except ValueError, e:
+        return render_template('home.html', 
+                                username=user_info['username'],
+                                followers='', following='', err_msg=e)   
 if __name__ == "__main__":
     app.run()

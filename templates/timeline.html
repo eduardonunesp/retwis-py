@@ -1,14 +1,18 @@
-<?
-include("retwis.php");
-include("header.php");
-?>
+{% include 'header.html' %}
+
 <h2>Timeline</h2>
 <i>Latest registered users (an example of SORT command!)</i><br>
-<?
-showLastUsers();
-?>
+<div>
+{% for user in last_users %}
+<a class="username" href="/profile/{{ user }}">{{ user }}</a>;
+{% endfor %}
+</div><br>
+
 <i>Latest 50 messages from users aroud the world!</i><br>
-<?
-showUserPosts(-1,0,50);
-include("footer.php")
-?>
+{% for post in last_posts %}
+<div class="post">
+<a class="username" href="profile/{{ post.username }}">{{ post.username }}</a>
+{{ post.status }}<br><i>posted {{ post.elapsed }} ago via web</i></div>
+{% endfor %}
+
+{% include 'footer.html' %}
