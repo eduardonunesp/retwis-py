@@ -9,11 +9,11 @@
 <div id="page">
     <div id="header">
         <a href="/"><img style="border:none" src="/static/img/logo.png" width="192" height="85" alt="Retwis"></a>   
+        {% if logged %}
         <div id="navbar">
         <a href="/">home</a>
         | <a href="/timeline">timeline</a>
-        {% if logged %}
         | <a href="/logout">logout</a>
-        {% endif %}
         </div>  
+        {% endif %}
     </div>
